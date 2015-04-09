@@ -56,6 +56,7 @@
 
     [appcast setDelegate:self];
     [appcast setUserAgentString:[self.updater userAgentString]];
+    [appcast setHttpHeaders:[self.updater httpHeaders]];
     [appcast fetchAppcastFromURL:URL];
 }
 
@@ -136,12 +137,10 @@
             item = [updateEnumerator nextObject];
         } while (item && ![self hostSupportsItem:item]);
 
-        if (binaryDeltaSupported()) {
-            SUAppcastItem *deltaUpdateItem = [item deltaUpdates][[self.host version]];
-            if (deltaUpdateItem && [self hostSupportsItem:deltaUpdateItem]) {
-                self.nonDeltaUpdateItem = item;
-                item = deltaUpdateItem;
-            }
+        SUAppcastItem *deltaUpdateItem = [item deltaUpdates][[self.host version]];
+        if (deltaUpdateItem && [self hostSupportsItem:deltaUpdateItem]) {
+            self.nonDeltaUpdateItem = item;
+            item = deltaUpdateItem;
         }
     }
 
