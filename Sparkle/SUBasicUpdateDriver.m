@@ -226,7 +226,7 @@
     if (newBundlePath) {
         if ([SUCodeSigningVerifier hostApplicationIsCodeSigned]) {
             NSError *error = nil;
-            if ([SUCodeSigningVerifier codeSignatureIsValidAtPath:newBundlePath error:&error]) {
+            if ([SUCodeSigningVerifier codeSignatureMatchesHostAndIsValidAtPath:newBundlePath error:&error]) {
                 return YES;
             } else {
                 SULog(@"Code signature check on update failed: %@. Sparkle will use DSA signature instead.", error);
@@ -265,14 +265,13 @@
 
 - (void)extractUpdate
 {
-    SUUnarchiver *unarchiver = [SUUnarchiver unarchiverForPath:self.downloadPath updatingHost:self.host];
-	if (!unarchiver)
-	{
+    SUUnarchiver *unarchiver = [SUUnarchiver unarchiverForPath:self.downloadPath updatingHostBundlePath:[[self.host bundle] bundlePath]];
+    if (!unarchiver) {
         SULog(@"Error: No valid unarchiver for %@!", self.downloadPath);
         [self unarchiverDidFail:nil];
         return;
     }
-    [unarchiver setDelegate:self];
+    unarchiver.delegate = self;
     [unarchiver start];
 }
 
@@ -301,8 +300,6 @@
 
     [self abortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SUUnarchivingError userInfo:@{ NSLocalizedDescriptionKey: SULocalizedString(@"An error occurred while extracting the archive. Please try again later.", nil) }]];
 }
-
-- (BOOL)shouldInstallSynchronously { return NO; }
 
 - (void)installWithToolAndRelaunch:(BOOL)relaunch
 {
