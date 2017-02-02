@@ -6,14 +6,14 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import "SUUpdater.h"
-
 #import "SUAppcast.h"
 #import "SUAppcastItem.h"
-#import "SUVersionComparisonProtocol.h"
-#import "SUAppcast.h"
-#import "SUConstants.h"
 #import "SULog.h"
+#import "SULocalizations.h"
+#import "SUErrors.h"
+
+
+#include "AppKitPrevention.h"
 
 @interface NSXMLElement (SUAppcastExtensions)
 @property (readonly, copy) NSDictionary *attributesAsDictionary;
@@ -68,7 +68,7 @@
 
     if (self.httpHeaders) {
         for (NSString *key in self.httpHeaders) {
-            id value = [self.httpHeaders objectForKey:key];
+            NSString *value = [self.httpHeaders objectForKey:key];
             [request setValue:value forHTTPHeaderField:key];
         }
     }

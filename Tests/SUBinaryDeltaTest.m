@@ -6,7 +6,7 @@
 //  Copyright (c) 2014 Sparkle Project. All rights reserved.
 //
 
-#import <Cocoa/Cocoa.h>
+#import <Foundation/Foundation.h>
 #import <XCTest/XCTest.h>
 #import "SUBinaryDeltaCommon.h"
 #import "SUBinaryDeltaCreate.h"
@@ -69,7 +69,7 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
     NSError *applyDiffError = nil;
     BOOL appliedDiff = NO;
     if (createdDiff) {
-        if (applyBinaryDelta(sourceDirectory, patchDirectory, diffFile, NO, &applyDiffError)) {
+        if (applyBinaryDelta(sourceDirectory, patchDirectory, diffFile, NO, ^(__unused double progress){}, &applyDiffError)) {
             appliedDiff = YES;
         } else {
             NSLog(@"Applying binary diff failed with error: %@", applyDiffError);

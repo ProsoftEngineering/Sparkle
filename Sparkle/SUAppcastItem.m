@@ -6,13 +6,12 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import "SUUpdater.h"
-
-#import "SUAppcast.h"
-#import "SUAppcastItem.h"
-#import "SUVersionComparisonProtocol.h"
 #import "SUAppcastItem.h"
 #import "SULog.h"
+#import "SUConstants.h"
+
+
+#include "AppKitPrevention.h"
 
 @interface SUAppcastItem ()
 @property (copy, readwrite) NSString *title;
@@ -36,6 +35,7 @@
 @synthesize displayVersionString;
 @synthesize DSASignature;
 @synthesize fileURL;
+@synthesize contentLength = _contentLength;
 @synthesize infoURL;
 @synthesize itemDescription;
 @synthesize maximumSystemVersion;
@@ -132,6 +132,15 @@
                 *error = @"Feed item's enclosure lacks URL";
             }
             return nil;
+        }
+        
+        if (enclosureURLString) {
+            NSString *enclosureLengthString = [enclosure objectForKey:SURSSAttributeLength];
+            long long contentLength = 0;
+            if (enclosureLengthString != nil) {
+                contentLength = [enclosureLengthString longLongValue];
+            }
+            _contentLength = (contentLength > 0) ? (uint64_t)contentLength : 0;
         }
 
         if (enclosureURLString) {
