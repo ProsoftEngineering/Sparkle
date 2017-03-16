@@ -7,66 +7,9 @@
 #import "SUStatusController.h"
 #import "SULog.h"
 #import "SUInstallerProtocol.h"
+#import "TerminationListener.h"
 
 #include <unistd.h>
-
-/*!
- * Time this app uses to recheck if the parent has already died.
- */
-static const NSTimeInterval SUParentQuitCheckInterval = .25;
-
-@interface TerminationListener : NSObject
-
-- (instancetype)initWithProcessId:(pid_t)pid;
-
-@end
-
-@interface TerminationListener ()
-
-@property (nonatomic, assign) pid_t processIdentifier;
-@property (nonatomic, strong) NSTimer *watchdogTimer;
-
-@end
-
-@implementation TerminationListener
-
-@synthesize processIdentifier = _processIdentifier;
-@synthesize watchdogTimer = _watchdogTimer;
-
-- (instancetype)initWithProcessId:(pid_t)pid
-{
-    if (!(self = [super init])) {
-        return nil;
-    }
-
-    self.processIdentifier = pid;
-
-    return self;
-}
-
-- (void)cleanupWithCompletion:(void (^)(void))completionBlock
-{
-    [self.watchdogTimer invalidate];
-    completionBlock();
-}
-
-- (void)startListeningWithCompletion:(void (^)(void))completionBlock
-{
-    BOOL alreadyTerminated = (getppid() == 1); // ppid is launchd (1) => parent terminated already
-    if (alreadyTerminated)
-        [self cleanupWithCompletion:completionBlock];
-    else
-        self.watchdogTimer = [NSTimer scheduledTimerWithTimeInterval:SUParentQuitCheckInterval target:self selector:@selector(watchdog:) userInfo:completionBlock repeats:YES];
-}
-
-- (void)watchdog:(NSTimer *)timer
-{
-    if (![NSRunningApplication runningApplicationWithProcessIdentifier:self.processIdentifier]) {
-        [self cleanupWithCompletion:timer.userInfo];
-    }
-}
-
-@end
 
 /*!
  * If the Installation takes longer than this time the Application Icon is shown in the Dock so that the user has some feedback.
@@ -128,7 +71,8 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
     
     self.hostPath = hostPath;
     self.relaunchPath = relaunchPath;
-    self.terminationListener = [[TerminationListener alloc] initWithProcessId:parentProcessId];
+    SULog(SULogLevelDefault, @"PID to listen: %d", parentProcessId);
+    self.terminationListener = [[TerminationListener alloc] initWithProcessIdentifier:@(parentProcessId)];
     self.updateFolderPath = updateFolderPath;
     self.shouldRelaunch = shouldRelaunch;
     self.shouldShowUI = shouldShowUI;
@@ -138,8 +82,13 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
 
 - (void)applicationDidFinishLaunching:(NSNotification __unused *)notification
 {
-    [self.terminationListener startListeningWithCompletion:^{
+    [self.terminationListener startListeningWithCompletion:^(BOOL terminationSuccess) {
         self.terminationListener = nil;
+        
+        if (!terminationSuccess) {
+            SULog(SULogLevelError, @"Failed to listen for application termination");
+            // Continue on with the installation anyway?
+        }
 		
         if (self.shouldShowUI) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SUInstallationTimeLimit * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -173,13 +122,13 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
     NSString *fileOperationToolPath = [[[[NSBundle mainBundle] executablePath] stringByDeletingLastPathComponent] stringByAppendingPathComponent:@""SPARKLE_FILEOP_TOOL_NAME];
     
     if (![[NSFileManager defaultManager] fileExistsAtPath:fileOperationToolPath]) {
-        SULog(@"Potential Installation Error: File operation tool path %@ is not found", fileOperationToolPath);
+        SULog(SULogLevelError, @"Potential Installation Error: File operation tool path %@ is not found", fileOperationToolPath);
     }
     
     NSError *retrieveInstallerError = nil;
     id<SUInstallerProtocol> installer = [SUInstaller installerForHost:host fileOperationToolPath:fileOperationToolPath updateDirectory:self.updateFolderPath error:&retrieveInstallerError];
     if (installer == nil) {
-        SULog(@"Retrieved Installer Error: %@", retrieveInstallerError);
+        SULog(SULogLevelError, @"Retrieved Installer Error: %@", retrieveInstallerError);
         exit(EXIT_FAILURE);
     }
     
@@ -194,7 +143,7 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *initialInstallationError = nil;
         if (![installer performInitialInstallation:&initialInstallationError]) {
-            SULog(@"Failed to perform initial installation with error: %@", initialInstallationError);
+            SULog(SULogLevelError, @"Failed to perform initial installation with error: %@", initialInstallationError);
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self showError:initialInstallationError];
                 exit(EXIT_FAILURE);
@@ -207,7 +156,7 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
             NSError *underlyingError = [finalInstallationError.userInfo objectForKey:NSUnderlyingErrorKey];
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (underlyingError == nil || underlyingError.code != SUInstallationCancelledError) {
-                    SULog(@"Failed to perform final installation Error: %@", finalInstallationError);
+                    SULog(SULogLevelError, @"Failed to perform final installation Error: %@", finalInstallationError);
                     [self showError:finalInstallationError];
                 }
                 exit(EXIT_FAILURE);
@@ -238,7 +187,7 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
     dispatch_block_t cleanupAndExit = ^{
         NSError *theError = nil;
         if (![[NSFileManager defaultManager] removeItemAtPath:self.updateFolderPath error:&theError]) {
-            SULog(@"Couldn't remove update folder: %@.", theError);
+            SULog(SULogLevelError, @"Couldn't remove update folder: %@.", theError);
         }
         
         [[NSFileManager defaultManager] removeItemAtPath:[[NSBundle mainBundle] bundlePath] error:NULL];
@@ -254,7 +203,7 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
         
         // Don't use -launchApplication: because we may not be launching an application. Eg: it could be a system prefpane
         if (![[NSWorkspace sharedWorkspace] openFile:relaunchPath]) {
-            SULog(@"Failed to launch %@", relaunchPath);
+            SULog(SULogLevelError, @"Failed to launch %@", relaunchPath);
         }
         
         [self.statusController close];

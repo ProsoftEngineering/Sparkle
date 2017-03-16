@@ -105,7 +105,7 @@
         *isGuidedPtr = isGuided;
 
     if (!newAppDownloadPath) {
-        SULog(@"Searched %@ for %@.(app|pkg)", inUpdateFolder, bundleFileNameNoExtension);
+        SULog(SULogLevelError, @"Searched %@ for %@.(app|pkg)", inUpdateFolder, bundleFileNameNoExtension);
     }
     return newAppDownloadPath;
 }
@@ -153,9 +153,11 @@
     NSBundle *bundle = host.bundle;
     assert(bundle != nil);
     
-    NSString *normalizedAppPath = [[[bundle bundlePath] stringByDeletingLastPathComponent] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@", [bundle objectForInfoDictionaryKey:(__bridge NSString *)kCFBundleNameKey], [[bundle bundlePath] pathExtension]]];
-    
-    return normalizedAppPath;
+    NSString *normalizedAppPath = [[[bundle bundlePath] stringByDeletingLastPathComponent] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@", [host objectForInfoDictionaryKey:(__bridge NSString *)kCFBundleNameKey], [[bundle bundlePath] pathExtension]]];
+
+    // Roundtrip string through fileSystemRepresentation to ensure it uses filesystem's Unicode normalization
+    // rather than arbitrary Unicode form from Info.plist - #1017
+    return [NSString stringWithUTF8String:[normalizedAppPath fileSystemRepresentation]];
 }
 
 @end
