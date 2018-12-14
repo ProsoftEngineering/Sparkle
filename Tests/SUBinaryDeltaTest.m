@@ -6,12 +6,13 @@
 //  Copyright (c) 2014 Sparkle Project. All rights reserved.
 //
 
-#import <Cocoa/Cocoa.h>
+#import <Foundation/Foundation.h>
 #import <XCTest/XCTest.h>
 #import "SUBinaryDeltaCommon.h"
 #import "SUBinaryDeltaCreate.h"
 #import "SUBinaryDeltaApply.h"
 #import <sys/stat.h>
+#include <sys/xattr.h>
 
 @interface SUBinaryDeltaTest : XCTestCase
 
@@ -23,8 +24,8 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
 
 - (void)testTemporaryDirectory
 {
-    NSString *tmp1 = temporaryDirectory(@"Sparkle");
-    NSString *tmp2 = temporaryDirectory(@"Sparkle");
+    NSString *tmp1 = temporaryDirectory(@"Sparklęエンジン");
+    NSString *tmp2 = temporaryDirectory(@"Sparklęエンジン");
     NSLog(@"Temporary directories: %@, %@", tmp1, tmp2);
     XCTAssertNotEqualObjects(tmp1, tmp2);
     XCTAssert(YES, @"Pass");
@@ -32,8 +33,8 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
 
 - (void)testTemporaryFile
 {
-    NSString *tmp1 = temporaryFilename(@"Sparkle");
-    NSString *tmp2 = temporaryFilename(@"Sparkle");
+    NSString *tmp1 = temporaryFilename(@"Sparklęエンジン");
+    NSString *tmp2 = temporaryFilename(@"Sparklęエンジン");
     NSLog(@"Temporary files: %@, %@", tmp1, tmp2);
     XCTAssertNotEqualObjects(tmp1, tmp2);
     XCTAssert(YES, @"Pass");
@@ -41,12 +42,12 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
 
 - (BOOL)createAndApplyPatchUsingVersion:(SUBinaryDeltaMajorVersion)majorVersion beforeDiffHandler:(SUDeltaHandler)beforeDiffHandler afterDiffHandler:(SUDeltaHandler)afterDiffHandler
 {
-    NSString *sourceDirectory = temporaryDirectory(@"Sparkle_temp1");
-    NSString *destinationDirectory = temporaryDirectory(@"Sparkle_temp2");
-    
-    NSString *diffFile = temporaryFilename(@"Sparkle_diff");
-    NSString *patchDirectory = temporaryDirectory(@"Sparkle_patch");
-    
+    NSString *sourceDirectory = temporaryDirectory(@"Spąrkle_temp1エンジン");
+    NSString *destinationDirectory = temporaryDirectory(@"Spąrkle_temp2エンジン");
+
+    NSString *diffFile = temporaryFilename(@"Spąrkle_diffエンジン");
+    NSString *patchDirectory = temporaryDirectory(@"Spąrkle_patchエンジン");
+
     XCTAssertNotNil(sourceDirectory);
     XCTAssertNotNil(destinationDirectory);
     XCTAssertNotNil(diffFile);
@@ -57,14 +58,23 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
         beforeDiffHandler(fileManager, sourceDirectory, destinationDirectory);
     }
     
-    BOOL createdDiff =
-    (createBinaryDelta(sourceDirectory, destinationDirectory, diffFile, majorVersion, NO) == 0);
-    
-    if (createdDiff && afterDiffHandler != nil) {
+    NSError *createDiffError = nil;
+    BOOL createdDiff = createBinaryDelta(sourceDirectory, destinationDirectory, diffFile, majorVersion, NO, &createDiffError);
+    if (!createdDiff) {
+        NSLog(@"Creating binary diff failed with error: %@", createDiffError);
+    } else if (afterDiffHandler != nil) {
         afterDiffHandler(fileManager, sourceDirectory, destinationDirectory);
     }
     
-    BOOL appliedDiff = (createdDiff && applyBinaryDelta(sourceDirectory, patchDirectory, diffFile, NO) == 0);
+    NSError *applyDiffError = nil;
+    BOOL appliedDiff = NO;
+    if (createdDiff) {
+        if (applyBinaryDelta(sourceDirectory, patchDirectory, diffFile, NO, ^(__unused double progress){}, &applyDiffError)) {
+            appliedDiff = YES;
+        } else {
+            NSLog(@"Applying binary diff failed with error: %@", applyDiffError);
+        }
+    }
     
     XCTAssertTrue([fileManager removeItemAtPath:sourceDirectory error:nil]);
     XCTAssertTrue([fileManager removeItemAtPath:destinationDirectory error:nil]);
@@ -106,27 +116,13 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
     }];
 }
 
-- (void)testNoFilesDiffWithInvalidLowVersion
-{
-    XCTAssertFalse([self createAndApplyPatchUsingVersion:(SUBinaryDeltaMajorVersion)0 beforeDiffHandler:^(NSFileManager *__unused fileManager, NSString *sourceDirectory, NSString *destinationDirectory) {
-        XCTAssertTrue([self testDirectoryHashEqualityWithSource:sourceDirectory destination:destinationDirectory]);
-    } afterDiffHandler:nil]);
-}
-
-- (void)testNoFilesDiffWithInvalidHighVersion
-{
-    XCTAssertFalse([self createAndApplyPatchUsingVersion:(SUBinaryDeltaMajorVersion)9999 beforeDiffHandler:^(NSFileManager *__unused fileManager, NSString *sourceDirectory, NSString *destinationDirectory) {
-        XCTAssertTrue([self testDirectoryHashEqualityWithSource:sourceDirectory destination:destinationDirectory]);
-    } afterDiffHandler:nil]);
-}
-
 - (void)testEmptyDataDiff
 {
     [self createAndApplyPatchWithHandler:^(NSFileManager *__unused fileManager, NSString *sourceDirectory, NSString *destinationDirectory) {
         NSData *emptyData = [NSData data];
-        NSString *sourceFile = [sourceDirectory stringByAppendingPathComponent:@"A"];
-        NSString *destinationFile = [destinationDirectory stringByAppendingPathComponent:@"A"];
-        
+        NSString *sourceFile = [sourceDirectory stringByAppendingPathComponent:@"AĄエンジン"];
+        NSString *destinationFile = [destinationDirectory stringByAppendingPathComponent:@"AĄエンジン"];
+
         XCTAssertTrue([emptyData writeToFile:sourceFile atomically:YES]);
         XCTAssertTrue([emptyData writeToFile:destinationFile atomically:YES]);
         
@@ -255,7 +251,7 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
             XCTFail(@"Failed setting file permissions");
         }
         
-        XCTAssertFalse([self testDirectoryHashEqualityWithSource:sourceDirectory destination:destinationDirectory]);
+        XCTAssertTrue([self testDirectoryHashEqualityWithSource:sourceDirectory destination:destinationDirectory]);
     }];
 }
 
@@ -928,6 +924,44 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
         
         XCTAssertFalse([self testDirectoryHashEqualityWithSource:sourceDirectory destination:destinationDirectory]);
     }];
+}
+
+- (void)testInvalidCodeSignatureExtendedAttributeInBeforeTree
+{
+    BOOL success = [self createAndApplyPatchWithBeforeDiffHandler:^(NSFileManager *__unused fileManager, NSString *sourceDirectory, NSString *destinationDirectory) {
+        NSString *sourceFile = [sourceDirectory stringByAppendingPathComponent:@"A"];
+        NSString *destinationFile = [destinationDirectory stringByAppendingPathComponent:@"A"];
+        
+        XCTAssertTrue([[NSData data] writeToFile:sourceFile atomically:YES]);
+        XCTAssertTrue([[NSData dataWithBytes:"loltest" length:7] writeToFile:destinationFile atomically:YES]);
+        
+        // the actual data doesn't matter for testing purposes
+        const char xattrValue[] = "hello";
+        
+        XCTAssertEqual(0, setxattr([sourceFile fileSystemRepresentation], APPLE_CODE_SIGN_XATTR_CODE_DIRECTORY_KEY, xattrValue, sizeof(xattrValue), 0, XATTR_CREATE));
+        XCTAssertEqual(0, setxattr([sourceFile fileSystemRepresentation], APPLE_CODE_SIGN_XATTR_CODE_REQUIREMENTS_KEY, xattrValue, sizeof(xattrValue), 0, XATTR_CREATE));
+        XCTAssertEqual(0, setxattr([sourceFile fileSystemRepresentation], APPLE_CODE_SIGN_XATTR_CODE_SIGNATURE_KEY, xattrValue, sizeof(xattrValue), 0, XATTR_CREATE));
+    } afterDiffHandler:nil];
+    XCTAssertFalse(success);
+}
+
+- (void)testInvalidCodeSignatureExtendedAttributeInAfterTree
+{
+    BOOL success = [self createAndApplyPatchWithBeforeDiffHandler:^(NSFileManager *__unused fileManager, NSString *sourceDirectory, NSString *destinationDirectory) {
+        NSString *sourceFile = [sourceDirectory stringByAppendingPathComponent:@"A"];
+        NSString *destinationFile = [destinationDirectory stringByAppendingPathComponent:@"A"];
+        
+        XCTAssertTrue([[NSData data] writeToFile:sourceFile atomically:YES]);
+        XCTAssertTrue([[NSData dataWithBytes:"loltest" length:7] writeToFile:destinationFile atomically:YES]);
+        
+        // the actual data doesn't matter for testing purposes
+        const char xattrValue[] = "hello";
+        
+        XCTAssertEqual(0, setxattr([destinationFile fileSystemRepresentation], APPLE_CODE_SIGN_XATTR_CODE_DIRECTORY_KEY, xattrValue, sizeof(xattrValue), 0, XATTR_CREATE));
+        XCTAssertEqual(0, setxattr([destinationFile fileSystemRepresentation], APPLE_CODE_SIGN_XATTR_CODE_REQUIREMENTS_KEY, xattrValue, sizeof(xattrValue), 0, XATTR_CREATE));
+        XCTAssertEqual(0, setxattr([destinationFile fileSystemRepresentation], APPLE_CODE_SIGN_XATTR_CODE_SIGNATURE_KEY, xattrValue, sizeof(xattrValue), 0, XATTR_CREATE));
+    } afterDiffHandler:nil];
+    XCTAssertFalse(success);
 }
 
 @end
